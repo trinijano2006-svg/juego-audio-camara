@@ -1,0 +1,1385 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estudio Armónico AI - Acordes por Gestos y Partitura PDF</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        serif: ['Playfair Display', 'Georgia', 'serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        buttermilk: '#FFF1B5',
+                        pastelblue: '#C1DBE8',
+                        burgundy: {
+                            950: '#2E201F',
+                            900: '#392826',
+                            800: '#43302E',
+                            700: '#543D3A',
+                            600: '#684D49',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+
+    <!-- Tone.js para síntesis de audio polifónico de alta calidad -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+    <!-- MediaPipe Hands y utilidades de dibujo/cámara -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <!-- PDF.js para renderizado nativo de PDFs en canvas y control total de scroll -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+    <style>
+        /* Estilos personalizados con paleta Old Burgundy (#43302E), Buttermilk (#FFF1B5) y Pastel Blue (#C1DBE8) */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #2E201F;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #684D49;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #82625D;
+        }
+        .finger-card-active {
+            transform: translateY(-4px) scale(1.03);
+            border-color: #FFF1B5 !important;
+            background: linear-gradient(180deg, rgba(255, 241, 181, 0.24) 0%, rgba(193, 219, 232, 0.16) 100%) !important;
+            box-shadow: 0 0 24px rgba(255, 241, 181, 0.35);
+        }
+    </style>
+</head>
+<body class="bg-burgundy-800 text-buttermilk font-sans min-h-screen flex flex-col selection:bg-buttermilk selection:text-burgundy-950 overflow-x-hidden">
+
+    <!-- Barra Superior de Navegación y Controles Globales -->
+    <header class="bg-burgundy-900/95 backdrop-blur-md border-b border-buttermilk/15 px-4 py-3 sticky top-0 z-30">
+        <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
+            <!-- Logo y Título -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-buttermilk to-pastelblue flex items-center justify-center shadow-lg shadow-black/25">
+                    <svg class="w-6 h-6 text-burgundy-950" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-serif font-bold tracking-tight text-buttermilk">
+                        Estudio Armónico AI
+                    </h1>
+                    <p class="text-xs text-pastelblue/85">Acordes por Rastreo de Manos & Visor Sincronizado</p>
+                </div>
+            </div>
+
+            <!-- Controles Centrales: Progresión, Sonido y Cámara -->
+            <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                <!-- Selector de Progresión / Canción -->
+                <div class="flex items-center bg-burgundy-950/80 border border-buttermilk/20 rounded-xl px-3 py-1.5">
+                    <label for="progression-select" class="text-xs text-pastelblue/80 mr-2 font-medium">Progresión:</label>
+                    <select id="progression-select" class="bg-transparent text-sm font-semibold text-buttermilk focus:outline-none cursor-pointer">
+                        <option value="pop_c" class="bg-burgundy-900 text-buttermilk">Pop Clásico en Do (C - G - Am - F - Dm)</option>
+                        <option value="ballad_g" class="bg-burgundy-900 text-buttermilk">Balada Acústica en Sol (G - D - Em - C - Am)</option>
+                        <option value="neosoul_f" class="bg-burgundy-900 text-buttermilk">Neo-Soul / Jazz (Fmaj7 - Em7 - Dm7 - Cmaj7 - G7)</option>
+                        <option value="latino_am" class="bg-burgundy-900 text-buttermilk">Andaluza / Pop Latino (Am - G - F - E7 - Dm)</option>
+                        <option value="custom" class="bg-burgundy-900 text-pastelblue">✦ Personalizada (Editar dedos)</option>
+                    </select>
+                </div>
+
+                <!-- Selector de Timbre del Sintetizador -->
+                <div class="hidden md:flex items-center bg-burgundy-950/80 border border-buttermilk/20 rounded-xl px-3 py-1.5">
+                    <label for="synth-preset" class="text-xs text-pastelblue/80 mr-2 font-medium">Timbre:</label>
+                    <select id="synth-preset" class="bg-transparent text-sm font-medium text-buttermilk focus:outline-none cursor-pointer">
+                        <option value="epiano" class="bg-burgundy-900 text-buttermilk">Piano Eléctrico Cálido</option>
+                        <option value="pad" class="bg-burgundy-900 text-buttermilk">Pad Atmosférico</option>
+                        <option value="synth" class="bg-burgundy-900 text-buttermilk">Sinte Pluck Suave</option>
+                    </select>
+                </div>
+
+                <!-- Botón Activar Audio -->
+                <button id="btn-audio-init" class="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-pastelblue/15 text-pastelblue border border-pastelblue/40 hover:bg-pastelblue/25 transition-all cursor-pointer">
+                    <span id="audio-dot" class="w-2 h-2 rounded-full bg-pastelblue animate-pulse"></span>
+                    <span id="audio-label">Audio Listo</span>
+                </button>
+
+                <!-- Botón Activar/Pausar Cámara -->
+                <button id="btn-toggle-camera" class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-buttermilk hover:bg-buttermilk/90 text-burgundy-950 shadow-lg shadow-black/25 transition-all cursor-pointer">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                    </svg>
+                    <span id="camera-btn-text">Iniciar Cámara</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Notificación Toast Flotante -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Contenedor Principal Split-Screen -->
+    <main class="flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-4 lg:p-5 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5">
+        
+        <!-- PANEL IZQUIERDO (7 columnas en desktop): Cámara MediaPipe + Controles de Dedos/Acordes -->
+        <section class="lg:col-span-7 flex flex-col gap-4">
+            
+            <!-- Visor de Cámara y Esqueleto MediaPipe -->
+            <div class="relative bg-burgundy-900 border border-buttermilk/15 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+                <!-- Barra de estado superior del visor -->
+                <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-burgundy-950/75 border-b border-buttermilk/15 text-xs">
+                    <div class="flex items-center gap-2">
+                        <span id="tracking-badge" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-burgundy-800 text-pastelblue/85 border border-buttermilk/20 font-medium">
+                            <span class="w-1.5 h-1.5 rounded-full bg-pastelblue"></span>
+                            Cámara en espera
+                        </span>
+                        <span id="hand-detected-info" class="text-buttermilk/75 hidden sm:inline">Levanta 1 dedo a la vez para disparar su acorde</span>
+                    </div>
+
+                    <!-- Controles rápidos de modo de disparo y sensibilidad -->
+                    <div class="flex items-center gap-3">
+                        <label class="flex items-center gap-1.5 text-buttermilk/85 cursor-pointer" title="Evita disparos múltiples accidentales">
+                            <span class="text-pastelblue/80">Cooldown:</span>
+                            <select id="cooldown-select" class="bg-burgundy-800 border border-buttermilk/25 rounded-lg px-2 py-0.5 text-xs text-buttermilk focus:outline-none">
+                                <option value="250">250 ms</option>
+                                <option value="400" selected>400 ms</option>
+                                <option value="650">650 ms</option>
+                            </select>
+                        </label>
+                        <button id="btn-mirror" class="px-2.5 py-1 rounded-lg bg-burgundy-800 border border-buttermilk/25 text-buttermilk hover:bg-burgundy-700 transition cursor-pointer" title="Invertir espejo de cámara">
+                            ⇄ Espejo
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Contenedor Responsivo del Canvas de Video -->
+                <div id="camera-wrapper" class="relative w-full aspect-video bg-burgundy-950 flex items-center justify-center overflow-hidden">
+                    <video id="webcam-video" class="hidden" playsinline></video>
+                    <canvas id="output-canvas" class="w-full h-full object-cover"></canvas>
+
+                    <!-- Overlay inicial antes de encender la cámara -->
+                    <div id="camera-placeholder" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-burgundy-900/95 to-burgundy-950/95 z-10">
+                        <div class="w-16 h-16 rounded-2xl bg-buttermilk/10 border border-buttermilk/30 flex items-center justify-center mb-4 text-buttermilk">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11"/>
+                            </svg>
+                        </div>
+                        <h2 class="text-lg sm:text-xl font-serif font-bold text-buttermilk mb-1">Controla la Armonía con ambas Manos</h2>
+                        <p class="text-xs sm:text-sm text-pastelblue/85 max-w-md mb-5">
+                            Activa tu cámara web para mapear cada dedo de tu mano izquierda y derecha a un acorde independiente, o haz clic en las tarjetas de abajo.
+                        </p>
+                        <button id="btn-start-overlay" class="px-5 py-2.5 rounded-xl bg-buttermilk hover:bg-buttermilk/90 text-burgundy-950 text-sm font-bold shadow-lg shadow-black/25 transition cursor-pointer">
+                            Activar Rastreo de Manos
+                        </button>
+                    </div>
+
+                    <!-- Indicador HUD Flotante del Acorde Actual en pantalla -->
+                    <div id="hud-active-chord" class="absolute top-3 left-3 pointer-events-none hidden">
+                        <div class="bg-burgundy-950/90 backdrop-blur-md border border-buttermilk/40 rounded-xl px-4 py-2 shadow-lg">
+                            <span class="text-[10px] uppercase tracking-wider text-pastelblue font-semibold block">Sonando ahora</span>
+                            <div class="flex items-baseline gap-2">
+                                <span id="hud-chord-name" class="text-2xl font-bold text-buttermilk font-mono">--</span>
+                                <span id="hud-finger-name" class="text-xs text-pastelblue/90">Ningún dedo</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Indicador de Progresión Sugerida -->
+                    <div class="absolute bottom-3 left-3 right-3 flex items-center justify-between pointer-events-none">
+                        <div class="bg-burgundy-950/85 backdrop-blur-md border border-buttermilk/20 rounded-xl px-3 py-1.5 text-xs flex items-center gap-2">
+                            <span class="text-pastelblue font-semibold">● Izq</span>
+                            <span class="text-buttermilk/30">|</span>
+                            <span class="text-buttermilk font-semibold">● Der</span>
+                            <span class="text-buttermilk/75 hidden sm:inline ml-1">Rastreo dual activo</span>
+                        </div>
+                        <div class="bg-burgundy-950/85 backdrop-blur-md border border-buttermilk/20 rounded-xl px-3 py-1.5 text-xs hidden sm:flex items-center gap-1.5">
+                            <span class="text-buttermilk/75">Izq:</span>
+                            <kbd class="px-1.5 py-0.5 bg-burgundy-800 rounded text-pastelblue font-mono text-[10px] border border-pastelblue/30">1-5</kbd>
+                            <span class="text-buttermilk/75 ml-1">Der:</span>
+                            <kbd class="px-1.5 py-0.5 bg-burgundy-800 rounded text-buttermilk font-mono text-[10px] border border-buttermilk/30">6-0</kbd>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel de los 10 Dedos / Acordes Independientes (Mano Izquierda + Mano Derecha) -->
+            <div class="bg-burgundy-900 border border-buttermilk/15 rounded-2xl p-4 shadow-xl">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <div>
+                        <h3 class="text-base font-serif font-bold text-buttermilk flex items-center gap-2">
+                            <span>Asignación Independiente de 10 Dedos</span>
+                            <span class="text-[11px] font-sans font-semibold px-2.5 py-0.5 rounded-full bg-pastelblue/15 text-pastelblue border border-pastelblue/35">
+                                Izquierda (5) + Derecha (5)
+                            </span>
+                        </h3>
+                        <p class="text-xs text-buttermilk/75">Personaliza la fundamental y el tipo de acorde de cada dedo libremente en cualquier momento.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="btn-stop-sound" class="px-3 py-1.5 rounded-xl bg-burgundy-800 hover:bg-burgundy-700 border border-buttermilk/20 text-xs font-medium text-buttermilk transition cursor-pointer">
+                            Silenciar (Esc)
+                        </button>
+                        <button id="btn-reset-progression" class="px-3 py-1.5 rounded-xl bg-burgundy-800 hover:bg-burgundy-700 border border-buttermilk/20 text-xs font-medium text-buttermilk transition cursor-pointer">
+                            Reiniciar Canción
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Contenedor Dual: Mano Izquierda y Mano Derecha ordenadas anatómicamente -->
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-3.5">
+                    <!-- Columna Mano Izquierda (Acento Pastel Blue) -->
+                    <div class="bg-burgundy-950/75 border border-pastelblue/35 rounded-xl p-3">
+                        <div class="flex items-center justify-between mb-2.5">
+                            <span class="text-xs font-bold uppercase tracking-wider text-pastelblue flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-pastelblue"></span>
+                                Mano Izquierda (Palma al frente)
+                            </span>
+                            <span class="text-[10px] text-pastelblue/70 font-mono">Teclas 1 · 2 · 3 · 4 · 5</span>
+                        </div>
+                        <div id="left-hand-grid" class="grid grid-cols-5 gap-1.5"></div>
+                    </div>
+
+                    <!-- Columna Mano Derecha (Acento Buttermilk) -->
+                    <div class="bg-burgundy-950/75 border border-buttermilk/35 rounded-xl p-3">
+                        <div class="flex items-center justify-between mb-2.5">
+                            <span class="text-xs font-bold uppercase tracking-wider text-buttermilk flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-buttermilk"></span>
+                                Mano Derecha (Palma al frente)
+                            </span>
+                            <span class="text-[10px] text-buttermilk/70 font-mono">Teclas 6 · 7 · 8 · 9 · 0</span>
+                        </div>
+                        <div id="right-hand-grid" class="grid grid-cols-5 gap-1.5"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- PANEL DERECHO (5 columnas en desktop): Visor de PDF / Letra y Acordes Sincronizado -->
+        <section class="lg:col-span-5 bg-burgundy-900 border border-buttermilk/15 rounded-2xl shadow-2xl flex flex-col overflow-hidden h-[75vh] lg:h-[calc(100vh-6.2rem)]">
+            
+            <!-- Cabecera del Visor de Canción / PDF -->
+            <div class="p-3.5 bg-burgundy-950/80 border-b border-buttermilk/15 flex flex-col gap-2.5">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-buttermilk"></span>
+                        <h2 id="document-title" class="text-base font-serif font-bold text-buttermilk truncate max-w-[200px] sm:max-w-[250px]">
+                            Canción Demo: "Luz de Ciudad"
+                        </h2>
+                    </div>
+
+                    <!-- Botón Subir PDF -->
+                    <div class="flex items-center gap-2">
+                        <input type="file" id="pdf-upload-input" accept="application/pdf" class="hidden">
+                        <button id="btn-upload-pdf" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-pastelblue hover:bg-pastelblue/90 text-burgundy-950 text-xs font-bold transition cursor-pointer shadow-sm">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                            </svg>
+                            <span>Subir PDF de canción</span>
+                        </button>
+                        <button id="btn-load-demo" class="hidden px-2.5 py-1.5 rounded-xl bg-burgundy-800 hover:bg-burgundy-700 border border-buttermilk/20 text-buttermilk text-xs font-medium transition cursor-pointer" title="Volver a la canción de ejemplo interactiva">
+                            Demo
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Barra de Sincronización y Auto-Scroll -->
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-buttermilk/15 text-xs">
+                    <label class="flex items-center gap-2 cursor-pointer select-none">
+                        <input type="checkbox" id="auto-scroll-toggle" checked class="w-4 h-4 rounded accent-buttermilk cursor-pointer">
+                        <span class="text-buttermilk font-medium">Avanzar al tocar acorde</span>
+                    </label>
+
+                    <div class="flex items-center gap-2">
+                        <span class="text-pastelblue/80">Avance:</span>
+                        <input type="range" id="scroll-step-slider" min="20" max="180" value="65" class="w-20 accent-pastelblue cursor-pointer" title="Cantidad de desplazamiento por cada acorde tocado">
+                        <span id="scroll-step-label" class="font-mono text-buttermilk w-10 text-right">65px</span>
+                    </div>
+
+                    <!-- Controles de Zoom para PDF -->
+                    <div id="pdf-zoom-controls" class="hidden items-center gap-1 bg-burgundy-800 border border-buttermilk/20 rounded-lg px-1.5 py-0.5">
+                        <button id="btn-zoom-out" class="px-1.5 text-buttermilk hover:text-pastelblue font-bold cursor-pointer">-</button>
+                        <span id="pdf-zoom-level" class="font-mono text-[11px] text-pastelblue px-1">100%</span>
+                        <button id="btn-zoom-in" class="px-1.5 text-buttermilk hover:text-pastelblue font-bold cursor-pointer">+</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Área Desplazable del Documento (Canción Demo Interactiva o Páginas PDF) -->
+            <div id="document-scroll-container" class="flex-1 overflow-y-auto p-4 sm:p-6 scroll-smooth relative bg-burgundy-950/60">
+                
+                <!-- VISTA A: Documento Demo Precargado con Acordes y Letra Sincronizada -->
+                <div id="demo-song-container" class="max-w-xl mx-auto space-y-6 pb-32">
+                    <div class="p-4 rounded-xl bg-burgundy-800/90 border border-pastelblue/30">
+                        <p class="text-xs text-pastelblue font-semibold mb-1">💡 Modo Guía Interactiva Activo</p>
+                        <p class="text-xs text-buttermilk/85 leading-relaxed">
+                            Cada vez que levantes un dedo frente a la cámara (o pulses una tarjeta de acorde), la canción avanzará automáticamente resaltando el verso y haciendo scroll suave. También puedes subir tu propio archivo <strong>.PDF</strong> arriba.
+                        </p>
+                    </div>
+
+                    <div id="demo-lyrics-lines" class="space-y-4 font-mono text-sm">
+                        <!-- Las líneas de la canción se generan dinámicamente para sincronizarse con cada acorde tocado -->
+                    </div>
+                </div>
+
+                <!-- VISTA B: Contenedor de Renderizado PDF (PDF.js) -->
+                <div id="pdf-viewer-container" class="hidden flex-col items-center gap-4 pb-32">
+                    <div id="pdf-loading-spinner" class="hidden py-12 flex flex-col items-center gap-3 text-pastelblue">
+                        <div class="w-8 h-8 border-2 border-buttermilk border-t-transparent rounded-full animate-spin"></div>
+                        <span class="text-xs">Renderizando páginas del PDF...</span>
+                    </div>
+                    <div id="pdf-pages-wrapper" class="w-full flex flex-col items-center gap-4"></div>
+                </div>
+
+            </div>
+
+            <!-- Barra Inferior de Navegación Manual del Documento -->
+            <div class="px-4 py-2.5 bg-burgundy-950/90 border-t border-buttermilk/15 flex items-center justify-between text-xs">
+                <span id="doc-progress-text" class="text-pastelblue/85">Verso 1 de 16</span>
+                <div class="flex items-center gap-2">
+                    <button id="btn-scroll-top" class="px-2.5 py-1 rounded-lg bg-burgundy-800 hover:bg-burgundy-700 border border-buttermilk/20 text-buttermilk transition cursor-pointer">
+                        ↑ Inicio
+                    </button>
+                    <button id="btn-step-prev" class="px-2.5 py-1 rounded-lg bg-burgundy-800 hover:bg-burgundy-700 border border-buttermilk/20 text-buttermilk transition cursor-pointer">
+                        ← Anterior
+                    </button>
+                    <button id="btn-step-next" class="px-2.5 py-1 rounded-lg bg-buttermilk hover:bg-buttermilk/90 text-burgundy-950 font-bold transition cursor-pointer">
+                        Siguiente →
+                    </button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Script Principal de la Aplicación -->
+    <script>
+        /**
+         * ============================================================================
+         * 1. CONFIGURACIÓN DE DATOS MUSICALES Y PROGRESIONES DUALES (10 DEDOS)
+         * ============================================================================
+         */
+        // Orden anatómico en pantalla (con palma hacia la cámara):
+        // Mano Izquierda: Meñique (4) -> Anular (3) -> Medio (2) -> Índice (1) -> Pulgar (0)
+        // Mano Derecha:   Pulgar (0) -> Índice (1) -> Medio (2) -> Anular (3) -> Meñique (4)
+        const LEFT_HAND_ORDER = [
+            { hand: 'left', fingerIdx: 4, name: 'Meñique', key: '1', icon: '🤙' },
+            { hand: 'left', fingerIdx: 3, name: 'Anular',  key: '2', icon: '💍' },
+            { hand: 'left', fingerIdx: 2, name: 'Medio',   key: '3', icon: '🖕' },
+            { hand: 'left', fingerIdx: 1, name: 'Índice',  key: '4', icon: '☝️' },
+            { hand: 'left', fingerIdx: 0, name: 'Pulgar',  key: '5', icon: '👍' }
+        ];
+
+        const RIGHT_HAND_ORDER = [
+            { hand: 'right', fingerIdx: 0, name: 'Pulgar',  key: '6', icon: '👍' },
+            { hand: 'right', fingerIdx: 1, name: 'Índice',  key: '7', icon: '☝️' },
+            { hand: 'right', fingerIdx: 2, name: 'Medio',   key: '8', icon: '🖕' },
+            { hand: 'right', fingerIdx: 3, name: 'Anular',  key: '9', icon: '💍' },
+            { hand: 'right', fingerIdx: 4, name: 'Meñique', key: '0', icon: '🤙' }
+        ];
+
+        const FINGER_NAMES_BY_INDEX = ['Pulgar', 'Índice', 'Medio', 'Anular', 'Meñique'];
+
+        const ROOT_NOTES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+        const ROOT_SEMITONES = {
+            'C': 0, 'C#': 1, 'D': 2, 'Eb': 3, 'E': 4, 'F': 5,
+            'F#': 6, 'G': 7, 'Ab': 8, 'A': 9, 'Bb': 10, 'B': 11
+        };
+
+        const CHORD_TYPES = {
+            'maj':  { label: '',     name: 'Mayor',       intervals: [0, 4, 7, 12] },
+            'min':  { label: 'm',    name: 'Menor',       intervals: [0, 3, 7, 12] },
+            '7':    { label: '7',    name: 'Dominante 7', intervals: [0, 4, 7, 10] },
+            'maj7': { label: 'maj7', name: 'Mayor 7',     intervals: [0, 4, 7, 11] },
+            'm7':   { label: 'm7',   name: 'Menor 7',     intervals: [0, 3, 7, 10] },
+            'sus4': { label: 'sus4', name: 'Sus4',        intervals: [0, 5, 7, 12] },
+            'dim':  { label: 'dim',  name: 'Disminuido',  intervals: [0, 3, 6, 9] },
+            'aug':  { label: 'aug',  name: 'Aumentado',   intervals: [0, 4, 8, 12] },
+            'off':  { label: '—',    name: 'Silencio',    intervals: [] }
+        };
+
+        // Genera dinámicamente las notas MIDI/Tone.js para cualquier fundamental y tipo de acorde
+        function buildChordNotes(root, type, baseOctave = 3) {
+            const typeDef = CHORD_TYPES[type];
+            if (!typeDef || type === 'off' || !root) return [];
+            const rootSemi = ROOT_SEMITONES[root];
+            if (rootSemi === undefined) return [];
+
+            const noteNames = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+            return typeDef.intervals.map(interval => {
+                const totalSemi = rootSemi + interval;
+                const octave = baseOctave + Math.floor(totalSemi / 12);
+                const noteName = noteNames[totalSemi % 12];
+                return `${noteName}${octave}`;
+            });
+        }
+
+        function formatChordSymbol(assignment) {
+            if (!assignment || assignment.type === 'off') return '—';
+            const suffix = CHORD_TYPES[assignment.type]?.label ?? '';
+            return `${assignment.root}${suffix}`;
+        }
+
+        // Progresiones predefinidas para ambas manos (indices 0=Pulgar .. 4=Meñique)
+        const PROGRESSIONS = {
+            pop_c: {
+                title: 'Pop Clásico en Do (Izq: Base / Der: Tensiones)',
+                left: [
+                    { root: 'C', type: 'maj' },  // Pulgar Izq
+                    { root: 'G', type: 'maj' },  // Índice Izq
+                    { root: 'A', type: 'min' },  // Medio Izq
+                    { root: 'F', type: 'maj' },  // Anular Izq
+                    { root: 'D', type: 'min' }   // Meñique Izq
+                ],
+                right: [
+                    { root: 'C', type: 'maj7' }, // Pulgar Der
+                    { root: 'G', type: '7' },    // Índice Der
+                    { root: 'A', type: 'm7' },   // Medio Der
+                    { root: 'F', type: 'maj7' }, // Anular Der
+                    { root: 'G', type: 'sus4' }  // Meñique Der
+                ]
+            },
+            ballad_g: {
+                title: 'Balada Acústica en Sol Mayor',
+                left: [
+                    { root: 'G', type: 'maj' },
+                    { root: 'D', type: 'maj' },
+                    { root: 'E', type: 'min' },
+                    { root: 'C', type: 'maj' },
+                    { root: 'A', type: 'min' }
+                ],
+                right: [
+                    { root: 'G', type: 'maj7' },
+                    { root: 'D', type: 'sus4' },
+                    { root: 'E', type: 'm7' },
+                    { root: 'C', type: 'maj7' },
+                    { root: 'D', type: '7' }
+                ]
+            },
+            neosoul_f: {
+                title: 'Neo-Soul / Jazz Suave',
+                left: [
+                    { root: 'F', type: 'maj7' },
+                    { root: 'E', type: 'm7' },
+                    { root: 'D', type: 'm7' },
+                    { root: 'C', type: 'maj7' },
+                    { root: 'G', type: '7' }
+                ],
+                right: [
+                    { root: 'A', type: 'm7' },
+                    { root: 'Bb', type: 'maj7' },
+                    { root: 'G', type: 'm7' },
+                    { root: 'C', type: '7' },
+                    { root: 'E', type: 'dim' }
+                ]
+            },
+            latino_am: {
+                title: 'Cadencia Andaluza / Pop Latino',
+                left: [
+                    { root: 'A', type: 'min' },
+                    { root: 'G', type: 'maj' },
+                    { root: 'F', type: 'maj' },
+                    { root: 'E', type: '7' },
+                    { root: 'D', type: 'min' }
+                ],
+                right: [
+                    { root: 'A', type: 'm7' },
+                    { root: 'G', type: '7' },
+                    { root: 'F', type: 'maj7' },
+                    { root: 'E', type: 'sus4' },
+                    { root: 'B', type: 'dim' }
+                ]
+            },
+            custom: {
+                title: 'Configuración Libre de 10 Dedos',
+                left: [
+                    { root: 'C', type: 'maj' },
+                    { root: 'F', type: 'maj' },
+                    { root: 'G', type: 'maj' },
+                    { root: 'A', type: 'min' },
+                    { root: 'D', type: 'min' }
+                ],
+                right: [
+                    { root: 'C', type: 'maj7' },
+                    { root: 'E', type: 'm7' },
+                    { root: 'G', type: '7' },
+                    { root: 'A', type: 'm7' },
+                    { root: 'B', type: 'dim' }
+                ]
+            }
+        };
+
+        // Canción de ejemplo con letra y referencia a mano + dedo
+        const DEMO_SONG_STRUCTURE = [
+            { section: 'INTRO',     hand: 'left',  fingerIdx: 0, lyric: '(Base suave con Pulgar Izquierdo...)' },
+            { section: 'INTRO',     hand: 'right', fingerIdx: 0, lyric: '(Respuesta brillante con Pulgar Derecho...)' },
+            { section: 'ESTROFA 1', hand: 'left',  fingerIdx: 0, lyric: 'Cae la tarde sobre el cristal,' },
+            { section: 'ESTROFA 1', hand: 'left',  fingerIdx: 1, lyric: 'las luces empiezan a despertar.' },
+            { section: 'ESTROFA 1', hand: 'left',  fingerIdx: 2, lyric: 'Cada acorde dibuja una voz,' },
+            { section: 'ESTROFA 1', hand: 'left',  fingerIdx: 3, lyric: 'en el silencio de esta habitación.' },
+            { section: 'PRE-CORO',  hand: 'left',  fingerIdx: 4, lyric: 'Y si cambio a mi mano derecha,' },
+            { section: 'PRE-CORO',  hand: 'right', fingerIdx: 1, lyric: 'la armonía crece y se vuelve más estrecha.' },
+            { section: 'CORO',      hand: 'right', fingerIdx: 0, lyric: 'Suena la armonía en el aire hoy,' },
+            { section: 'CORO',      hand: 'right', fingerIdx: 1, lyric: 'siguiendo el pulso de mi corazón.' },
+            { section: 'CORO',      hand: 'right', fingerIdx: 2, lyric: 'Diez dedos libres para improvisar,' },
+            { section: 'CORO',      hand: 'right', fingerIdx: 3, lyric: 'cada movimiento empieza a cantar.' },
+            { section: 'PUENTE',    hand: 'left',  fingerIdx: 2, lyric: 'Alterna izquierda y derecha al compás,' },
+            { section: 'PUENTE',    hand: 'right', fingerIdx: 4, lyric: 'creando colores que no acaban jamás.' },
+            { section: 'FINAL',     hand: 'left',  fingerIdx: 3, lyric: 'Y poco a poco vuelve la calma,' },
+            { section: 'FINAL',     hand: 'right', fingerIdx: 0, lyric: 'dejando el eco dentro del alma.' }
+        ];
+
+        /**
+         * ============================================================================
+         * 2. ESTADO GLOBAL DE LA APLICACIÓN
+         * ============================================================================
+         */
+        const state = {
+            currentProgressionKey: 'pop_c',
+            assignments: {
+                left: JSON.parse(JSON.stringify(PROGRESSIONS.pop_c.left)),
+                right: JSON.parse(JSON.stringify(PROGRESSIONS.pop_c.right))
+            },
+            activeTrigger: null, // { hand: 'left'|'right', fingerIdx: 0..4 }
+            lastTriggerTime: {
+                left: [0, 0, 0, 0, 0],
+                right: [0, 0, 0, 0, 0]
+            },
+            cooldownMs: 400,
+            previousFingerStates: {
+                left: [false, false, false, false, false],
+                right: [false, false, false, false, false]
+            },
+            cameraRunning: false,
+            mirrorVideo: true,
+            audioInitialized: false,
+            synthPreset: 'epiano',
+            isPdfMode: false,
+            pdfDoc: null,
+            pdfScale: 1.15,
+            currentDemoLine: 0,
+            autoScrollEnabled: true,
+            scrollStepPx: 65
+        };
+
+        /**
+         * ============================================================================
+         * 3. MOTOR DE AUDIO POLIFÓNICO (TONE.JS)
+         * ============================================================================
+         */
+        let polySynth = null;
+        let reverbEffect = null;
+
+        async function initAudioEngine() {
+            if (state.audioInitialized) return;
+            try {
+                await Tone.start();
+                reverbEffect = new Tone.Reverb({ decay: 2.2, wet: 0.28 }).toDestination();
+                await reverbEffect.generate();
+                createSynthInstance(state.synthPreset);
+                state.audioInitialized = true;
+
+                const dot = document.getElementById('audio-dot');
+                const label = document.getElementById('audio-label');
+                if (dot) dot.classList.remove('animate-pulse');
+                if (label) label.textContent = 'Audio Activo';
+            } catch (err) {
+                console.error('Error al inicializar audio:', err);
+            }
+        }
+
+        function createSynthInstance(preset) {
+            if (polySynth) {
+                polySynth.releaseAll();
+                polySynth.dispose();
+            }
+
+            if (preset === 'epiano') {
+                polySynth = new Tone.PolySynth(Tone.FMSynth, {
+                    harmonicity: 2,
+                    modulationIndex: 1.5,
+                    oscillator: { type: 'sine' },
+                    envelope: { attack: 0.02, decay: 0.6, sustain: 0.45, release: 1.4 },
+                    modulation: { type: 'triangle' },
+                    modulationEnvelope: { attack: 0.05, decay: 0.3, sustain: 0.2, release: 0.8 }
+                }).connect(reverbEffect);
+                polySynth.volume.value = -7;
+            } else if (preset === 'pad') {
+                polySynth = new Tone.PolySynth(Tone.Synth, {
+                    oscillator: { type: 'triangle' },
+                    envelope: { attack: 0.35, decay: 0.8, sustain: 0.7, release: 2.0 }
+                }).connect(reverbEffect);
+                polySynth.volume.value = -8;
+            } else {
+                polySynth = new Tone.PolySynth(Tone.Synth, {
+                    oscillator: { type: 'sawtooth' },
+                    envelope: { attack: 0.01, decay: 0.35, sustain: 0.2, release: 0.9 }
+                }).connect(reverbEffect);
+                polySynth.volume.value = -11;
+            }
+        }
+
+        async function playChordForHandFinger(hand, fingerIndex, forceTrigger = false) {
+            const now = Date.now();
+            if (!forceTrigger && (now - state.lastTriggerTime[hand][fingerIndex] < state.cooldownMs)) {
+                return;
+            }
+
+            const assignment = state.assignments[hand][fingerIndex];
+            if (!assignment || assignment.type === 'off') {
+                return;
+            }
+
+            if (!state.audioInitialized) {
+                await initAudioEngine();
+            }
+
+            state.lastTriggerTime[hand][fingerIndex] = now;
+            state.activeTrigger = { hand, fingerIdx: fingerIndex };
+
+            // Octava 3 para mano izquierda (más cálida/grave) y octava 4 para mano derecha (más brillante)
+            const baseOctave = hand === 'left' ? 3 : 4;
+            const notes = buildChordNotes(assignment.root, assignment.type, baseOctave);
+            const chordLabel = formatChordSymbol(assignment);
+
+            if (polySynth && notes.length > 0) {
+                const baseTime = Tone.now();
+                notes.forEach((note, idx) => {
+                    polySynth.triggerAttackRelease(note, '2n', baseTime + idx * 0.02);
+                });
+            }
+
+            const handLabel = hand === 'left' ? 'Mano Izquierda' : 'Mano Derecha';
+            const fingerName = FINGER_NAMES_BY_INDEX[fingerIndex];
+
+            updateFingerCardsUI();
+            updateHUD(chordLabel, `${handLabel} · ${fingerName}`, hand);
+            advanceSongDocument();
+        }
+
+        function stopAllSounds() {
+            if (polySynth) {
+                polySynth.releaseAll();
+            }
+            state.activeTrigger = null;
+            updateFingerCardsUI();
+            document.getElementById('hud-active-chord').classList.add('hidden');
+        }
+
+        /**
+         * ============================================================================
+         * 4. INTERFAZ DE TARJETAS DE 10 DEDOS (SELECTORES INDEPENDIENTES)
+         * ============================================================================
+         */
+        function renderFingerCards() {
+            renderHandGrid('left-hand-grid', LEFT_HAND_ORDER);
+            renderHandGrid('right-hand-grid', RIGHT_HAND_ORDER);
+            updateFingerCardsUI();
+        }
+
+        function renderHandGrid(containerId, fingerList) {
+            const grid = document.getElementById(containerId);
+            grid.innerHTML = '';
+
+            fingerList.forEach((item) => {
+                const { hand, fingerIdx, name, key, icon } = item;
+                const assignment = state.assignments[hand][fingerIdx];
+                const chordSymbol = formatChordSymbol(assignment);
+                const isLeft = hand === 'left';
+
+                const rootOptions = ROOT_NOTES.map(r =>
+                    `<option value="${r}" ${r === assignment.root ? 'selected' : ''} class="bg-studio-900 text-white">${r}</option>`
+                ).join('');
+
+                const typeOptions = Object.entries(CHORD_TYPES).map(([tKey, tDef]) =>
+                    `<option value="${tKey}" ${tKey === assignment.type ? 'selected' : ''} class="bg-studio-900 text-white">${tDef.name}</option>`
+                ).join('');
+
+                const card = document.createElement('div');
+                card.id = `finger-card-${hand}-${fingerIdx}`;
+                card.className = `rounded-xl bg-burgundy-900/95 border border-buttermilk/20 p-2 flex flex-col justify-between transition-all duration-150 cursor-pointer select-none hover:border-buttermilk/55`;
+
+                card.innerHTML = `
+                    <div class="flex items-center justify-between gap-1">
+                        <span class="text-[10px] font-semibold text-buttermilk/90 truncate" title="${name}">
+                            ${icon} ${name}
+                        </span>
+                        <span class="text-[9px] font-mono px-1 rounded bg-burgundy-800 text-pastelblue border border-buttermilk/20">
+                            ${key}
+                        </span>
+                    </div>
+
+                    <div class="my-1.5 text-center">
+                        <div class="text-base sm:text-lg font-bold font-mono ${assignment.type === 'off' ? 'text-buttermilk/30' : (isLeft ? 'text-pastelblue' : 'text-buttermilk')}">
+                            ${chordSymbol}
+                        </div>
+                    </div>
+
+                    <div class="space-y-1">
+                        <select data-hand="${hand}" data-finger="${fingerIdx}" data-role="root"
+                            class="chord-prop-select w-full bg-burgundy-800 border border-buttermilk/25 rounded-md px-1 py-0.5 text-[11px] font-mono font-semibold text-buttermilk focus:outline-none focus:border-pastelblue">
+                            ${rootOptions}
+                        </select>
+                        <select data-hand="${hand}" data-finger="${fingerIdx}" data-role="type"
+                            class="chord-prop-select w-full bg-burgundy-800 border border-buttermilk/25 rounded-md px-1 py-0.5 text-[10px] text-pastelblue focus:outline-none focus:border-buttermilk">
+                            ${typeOptions}
+                        </select>
+                    </div>
+                `;
+
+                card.addEventListener('click', (e) => {
+                    if (e.target.tagName.toLowerCase() === 'select') return;
+                    playChordForHandFinger(hand, fingerIdx, true);
+                });
+
+                grid.appendChild(card);
+            });
+
+            // Eventos de cambio inmediato en los selectores de nota fundamental o tipo de acorde
+            grid.querySelectorAll('.chord-prop-select').forEach(sel => {
+                sel.addEventListener('change', (e) => {
+                    const hand = e.target.dataset.hand;
+                    const fingerIdx = parseInt(e.target.dataset.finger, 10);
+                    const role = e.target.dataset.role;
+                    state.assignments[hand][fingerIdx][role] = e.target.value;
+
+                    renderFingerCards();
+                    if (!state.isPdfMode) {
+                        renderDemoSongLines();
+                    }
+                    playChordForHandFinger(hand, fingerIdx, true);
+                });
+            });
+        }
+
+        function updateFingerCardsUI() {
+            ['left', 'right'].forEach(hand => {
+                for (let idx = 0; idx < 5; idx++) {
+                    const card = document.getElementById(`finger-card-${hand}-${idx}`);
+                    if (!card) continue;
+                    card.classList.remove('finger-card-active');
+
+                    if (state.activeTrigger && state.activeTrigger.hand === hand && state.activeTrigger.fingerIdx === idx) {
+                        card.classList.add('finger-card-active');
+                    }
+                }
+            });
+        }
+
+        function updateHUD(chordName, subtitle, hand) {
+            const hud = document.getElementById('hud-active-chord');
+            const chordEl = document.getElementById('hud-chord-name');
+            hud.classList.remove('hidden');
+            chordEl.textContent = chordName;
+            chordEl.className = `text-2xl font-bold font-mono ${hand === 'left' ? 'text-pastelblue' : 'text-buttermilk'}`;
+            document.getElementById('hud-finger-name').textContent = subtitle;
+        }
+
+        /**
+         * ============================================================================
+         * 5. VISOR DE CANCIÓN DEMO Y VISOR DE PDF (PDF.JS)
+         * ============================================================================
+         */
+        // Configurar worker de PDF.js
+        if (window.pdfjsLib) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+
+        function renderDemoSongLines() {
+            const container = document.getElementById('demo-lyrics-lines');
+            container.innerHTML = '';
+
+            let lastSection = '';
+
+            DEMO_SONG_STRUCTURE.forEach((item, index) => {
+                if (item.section !== lastSection) {
+                    const secHeader = document.createElement('div');
+                    secHeader.className = 'text-[11px] font-bold tracking-widest uppercase text-pastelblue pt-3 pb-1 border-b border-buttermilk/15';
+                    secHeader.textContent = `[ ${item.section} ]`;
+                    container.appendChild(secHeader);
+                    lastSection = item.section;
+                }
+
+                const assignment = state.assignments[item.hand][item.fingerIdx];
+                const chordSymbol = formatChordSymbol(assignment);
+                const fingerName = FINGER_NAMES_BY_INDEX[item.fingerIdx];
+                const handText = item.hand === 'left' ? 'Mano Izq' : 'Mano Der';
+
+                const lineEl = document.createElement('div');
+                lineEl.id = `demo-line-${index}`;
+                lineEl.className = `p-3 rounded-xl border transition-all duration-300 cursor-pointer ${
+                    index === state.currentDemoLine
+                        ? 'bg-buttermilk/15 border-buttermilk shadow-lg shadow-black/20 scale-[1.01]'
+                        : 'bg-burgundy-900/75 border-buttermilk/15 hover:border-buttermilk/40 opacity-80'
+                }`;
+
+                lineEl.innerHTML = `
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-bold ${
+                            index === state.currentDemoLine
+                                ? 'bg-buttermilk text-burgundy-950'
+                                : (item.hand === 'left' ? 'bg-pastelblue/20 text-pastelblue' : 'bg-buttermilk/20 text-buttermilk')
+                        }">
+                            ${chordSymbol}
+                        </span>
+                        <span class="text-[11px] text-pastelblue/80">${handText} · ${fingerName}</span>
+                    </div>
+                    <p class="text-sm sm:text-base font-sans ${
+                        index === state.currentDemoLine ? 'text-buttermilk font-semibold' : 'text-buttermilk/85'
+                    }">
+                        ${item.lyric}
+                    </p>
+                `;
+
+                lineEl.addEventListener('click', () => {
+                    state.currentDemoLine = index;
+                    renderDemoSongLines();
+                    playChordForHandFinger(item.hand, item.fingerIdx, true);
+                });
+
+                container.appendChild(lineEl);
+            });
+
+            updateDocProgressLabel();
+        }
+
+        function advanceSongDocument() {
+            if (!state.autoScrollEnabled) return;
+
+            const scrollContainer = document.getElementById('document-scroll-container');
+
+            if (!state.isPdfMode) {
+                // Avanzar línea resaltada en la canción demo
+                state.currentDemoLine = (state.currentDemoLine + 1) % DEMO_SONG_STRUCTURE.length;
+                renderDemoSongLines();
+
+                const activeEl = document.getElementById(`demo-line-${state.currentDemoLine}`);
+                if (activeEl) {
+                    activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            } else {
+                // Desplazamiento suave en el documento PDF subido
+                scrollContainer.scrollBy({
+                    top: state.scrollStepPx,
+                    behavior: 'smooth'
+                });
+                updateDocProgressLabel();
+            }
+        }
+
+        function updateDocProgressLabel() {
+            const label = document.getElementById('doc-progress-text');
+            if (!state.isPdfMode) {
+                label.textContent = `Verso ${state.currentDemoLine + 1} de ${DEMO_SONG_STRUCTURE.length}`;
+            } else if (state.pdfDoc) {
+                const scrollContainer = document.getElementById('document-scroll-container');
+                const maxScroll = Math.max(1, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+                const pct = Math.min(100, Math.round((scrollContainer.scrollTop / maxScroll) * 100));
+                label.textContent = `PDF (${state.pdfDoc.numPages} págs) · Progreso: ${pct}%`;
+            }
+        }
+
+        async function handlePdfUpload(file) {
+            if (!file || file.type !== 'application/pdf') {
+                showToast('Por favor selecciona un archivo PDF válido.', 'error');
+                return;
+            }
+
+            state.isPdfMode = true;
+            document.getElementById('demo-song-container').classList.add('hidden');
+            document.getElementById('pdf-viewer-container').classList.remove('hidden');
+            document.getElementById('pdf-viewer-container').classList.add('flex');
+            document.getElementById('btn-load-demo').classList.remove('hidden');
+            document.getElementById('pdf-zoom-controls').classList.remove('hidden');
+            document.getElementById('pdf-zoom-controls').classList.add('flex');
+            document.getElementById('document-title').textContent = file.name;
+
+            const spinner = document.getElementById('pdf-loading-spinner');
+            const pagesWrapper = document.getElementById('pdf-pages-wrapper');
+            spinner.classList.remove('hidden');
+            pagesWrapper.innerHTML = '';
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                state.pdfDoc = await loadingTask.promise;
+
+                await renderAllPdfPages();
+                showToast(`PDF "${file.name}" cargado (${state.pdfDoc.numPages} páginas).`, 'success');
+            } catch (error) {
+                console.error('Error al leer PDF:', error);
+                showToast('No se pudo procesar el archivo PDF.', 'error');
+            } finally {
+                spinner.classList.add('hidden');
+                updateDocProgressLabel();
+            }
+        }
+
+        async function renderAllPdfPages() {
+            if (!state.pdfDoc) return;
+            const pagesWrapper = document.getElementById('pdf-pages-wrapper');
+            pagesWrapper.innerHTML = '';
+
+            const containerWidth = document.getElementById('document-scroll-container').clientWidth - 48;
+
+            for (let pageNum = 1; pageNum <= state.pdfDoc.numPages; pageNum++) {
+                const page = await state.pdfDoc.getPage(pageNum);
+                const unscaledViewport = page.getViewport({ scale: 1 });
+                const baseScale = (containerWidth / unscaledViewport.width) * state.pdfScale;
+                const viewport = page.getViewport({ scale: Math.max(0.6, Math.min(2.5, baseScale)) });
+
+                const canvas = document.createElement('canvas');
+                canvas.className = 'rounded-xl shadow-lg bg-white max-w-full h-auto border border-buttermilk/30';
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+
+                const ctx = canvas.getContext('2d');
+                await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+                pagesWrapper.appendChild(canvas);
+            }
+            document.getElementById('pdf-zoom-level').textContent = `${Math.round(state.pdfScale * 100)}%`;
+        }
+
+        /**
+         * ============================================================================
+         * 6. RASTREO DE MANOS CON MEDIAPIPE HANDS
+         * ============================================================================
+         */
+        let mpHands = null;
+        let mpCamera = null;
+
+        function initMediaPipeHands() {
+            const videoElement = document.getElementById('webcam-video');
+            const canvasElement = document.getElementById('output-canvas');
+            const canvasCtx = canvasElement.getContext('2d');
+
+            mpHands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+
+            mpHands.setOptions({
+                maxNumHands: 2,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.72,
+                minTrackingConfidence: 0.68
+            });
+
+            mpHands.onResults((results) => {
+                if (canvasElement.width !== videoElement.videoWidth || canvasElement.height !== videoElement.videoHeight) {
+                    if (videoElement.videoWidth > 0) {
+                        canvasElement.width = videoElement.videoWidth;
+                        canvasElement.height = videoElement.videoHeight;
+                    }
+                }
+
+                canvasCtx.save();
+                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+                if (state.mirrorVideo) {
+                    canvasCtx.translate(canvasElement.width, 0);
+                    canvasCtx.scale(-1, 1);
+                }
+
+                canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+                canvasCtx.fillStyle = 'rgba(46, 32, 31, 0.28)';
+                canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+
+                const detectedHandsSet = new Set();
+
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    results.multiHandLandmarks.forEach((landmarks, idx) => {
+                        const rawLabel = results.multiHandedness && results.multiHandedness[idx]
+                            ? results.multiHandedness[idx].label
+                            : 'Right';
+
+                        const userHand = state.mirrorVideo
+                            ? (rawLabel === 'Right' ? 'left' : 'right')
+                            : (rawLabel === 'Right' ? 'right' : 'left');
+
+                        detectedHandsSet.add(userHand);
+
+                        // Pastel Blue (#C1DBE8) para Mano Izquierda y Buttermilk (#FFF1B5) para Mano Derecha
+                        const connectorColor = userHand === 'left' ? '#C1DBE8' : '#FFF1B5';
+                        const dotColor = userHand === 'left' ? '#C1DBE8' : '#FFF1B5';
+
+                        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {
+                            color: connectorColor,
+                            lineWidth: 3
+                        });
+                        drawLandmarks(canvasCtx, landmarks, {
+                            color: dotColor,
+                            fillColor: '#43302E',
+                            lineWidth: 1.5,
+                            radius: 4
+                        });
+
+                        drawHandBadgeOnCanvas(canvasCtx, landmarks[0], userHand, canvasElement.width, canvasElement.height);
+
+                        const raisedFingers = detectRaisedFingers(landmarks);
+                        processFingerTriggers(userHand, raisedFingers, canvasCtx, landmarks, canvasElement.width, canvasElement.height);
+                    });
+                }
+
+                // Resetear estado de dedos para manos que salieron del cuadro
+                if (!detectedHandsSet.has('left')) {
+                    state.previousFingerStates.left = [false, false, false, false, false];
+                }
+                if (!detectedHandsSet.has('right')) {
+                    state.previousFingerStates.right = [false, false, false, false, false];
+                }
+
+                canvasCtx.restore();
+            });
+
+            mpCamera = new Camera(videoElement, {
+                onFrame: async () => {
+                    if (state.cameraRunning && mpHands) {
+                        await mpHands.send({ image: videoElement });
+                    }
+                },
+                width: 1280,
+                height: 720
+            });
+        }
+
+        function drawHandBadgeOnCanvas(ctx, wristLandmark, userHand, width, height) {
+            ctx.save();
+            const wx = wristLandmark.x * width;
+            const wy = Math.min(height - 20, wristLandmark.y * height + 28);
+
+            // Si el canvas está en espejo, des-invertimos localmente el contexto para que el texto sea legible
+            if (state.mirrorVideo) {
+                ctx.translate(wx, wy);
+                ctx.scale(-1, 1);
+                ctx.translate(-wx, -wy);
+            }
+
+            const label = userHand === 'left' ? 'MANO IZQUIERDA' : 'MANO DERECHA';
+            ctx.font = 'bold 12px Inter, sans-serif';
+            const textWidth = ctx.measureText(label).width;
+            const boxW = textWidth + 18;
+            const boxH = 24;
+
+            ctx.fillStyle = 'rgba(67, 48, 46, 0.90)';
+            ctx.strokeStyle = userHand === 'left' ? '#C1DBE8' : '#FFF1B5';
+            ctx.lineWidth = 1.5;
+
+            ctx.beginPath();
+            ctx.roundRect(wx - boxW / 2, wy - boxH / 2, boxW, boxH, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = userHand === 'left' ? '#C1DBE8' : '#FFF1B5';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, wx, wy);
+            ctx.restore();
+        }
+
+        /**
+         * Determina cuáles de los 5 dedos [Pulgar, Índice, Medio, Anular, Meñique] están levantados
+         * de forma invariante para mano izquierda o derecha.
+         */
+        function detectRaisedFingers(landmarks) {
+            const raised = [false, false, false, false, false];
+
+            // 1. Pulgar: comparar separación horizontal de la punta (4) respecto al nudillo índice (5) y meñique (17)
+            const thumbTip = landmarks[4];
+            const thumbIp = landmarks[3];
+            const indexMcp = landmarks[5];
+            const pinkyMcp = landmarks[17];
+
+            const isThumbOnLeftSide = indexMcp.x < pinkyMcp.x;
+            if (isThumbOnLeftSide) {
+                raised[0] = thumbTip.x < thumbIp.x - 0.025;
+            } else {
+                raised[0] = thumbTip.x > thumbIp.x + 0.025;
+            }
+
+            // 2. Dedos Índice (8 vs 6), Medio (12 vs 10), Anular (16 vs 14), Meñique (20 vs 18)
+            const fingerTips = [8, 12, 16, 20];
+            const fingerPips = [6, 10, 14, 18];
+
+            for (let i = 0; i < 4; i++) {
+                const tipY = landmarks[fingerTips[i]].y;
+                const pipY = landmarks[fingerPips[i]].y;
+                raised[i + 1] = tipY < (pipY - 0.035);
+            }
+
+            return raised;
+        }
+
+        /**
+         * Detecta el flanco de subida para cada mano (left/right) y dispara su acorde asignado.
+         */
+        function processFingerTriggers(userHand, raisedFingers, ctx, landmarks, width, height) {
+            const tipIndices = [4, 8, 12, 16, 20];
+            const prevStates = state.previousFingerStates[userHand];
+            const strokeColor = userHand === 'left' ? '#C1DBE8' : '#FFF1B5';
+            const fillColor = userHand === 'left' ? 'rgba(193, 219, 232, 0.35)' : 'rgba(255, 241, 181, 0.35)';
+
+            for (let i = 0; i < 5; i++) {
+                const isUp = raisedFingers[i];
+                const wasUp = prevStates[i];
+
+                if (isUp && !wasUp) {
+                    playChordForHandFinger(userHand, i, false);
+                }
+
+                if (isUp) {
+                    const tip = landmarks[tipIndices[i]];
+                    const cx = tip.x * width;
+                    const cy = tip.y * height;
+
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 14, 0, 2 * Math.PI);
+                    ctx.fillStyle = fillColor;
+                    ctx.fill();
+                    ctx.lineWidth = 2.5;
+                    ctx.strokeStyle = strokeColor;
+                    ctx.stroke();
+                }
+            }
+
+            state.previousFingerStates[userHand] = [...raisedFingers];
+        }
+
+        async function toggleCamera() {
+            const btnText = document.getElementById('camera-btn-text');
+            const badge = document.getElementById('tracking-badge');
+            const placeholder = document.getElementById('camera-placeholder');
+
+            if (!state.cameraRunning) {
+                try {
+                    btnText.textContent = 'Iniciando...';
+                    if (!mpHands) {
+                        initMediaPipeHands();
+                    }
+                    await initAudioEngine();
+                    await mpCamera.start();
+                    state.cameraRunning = true;
+
+                    placeholder.classList.add('hidden');
+                    btnText.textContent = 'Pausar Cámara';
+                    badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-pastelblue/20 text-pastelblue border border-pastelblue/45 font-medium';
+                    badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-pastelblue animate-ping"></span> Rastreo Activo';
+                    showToast('Cámara activa. ¡Levanta un dedo para tocar su acorde!', 'success');
+                } catch (error) {
+                    console.error('Error al acceder a la webcam:', error);
+                    btnText.textContent = 'Iniciar Cámara';
+                    showToast('No se pudo acceder a la cámara web. Revisa los permisos del navegador.', 'error');
+                }
+            } else {
+                state.cameraRunning = false;
+                if (mpCamera) {
+                    await mpCamera.stop();
+                }
+                placeholder.classList.remove('hidden');
+                btnText.textContent = 'Iniciar Cámara';
+                badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-burgundy-800 text-pastelblue/85 border border-buttermilk/20 font-medium';
+                badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-pastelblue"></span> Cámara pausada';
+            }
+        }
+
+        /**
+         * ============================================================================
+         * 7. UTILIDADES Y EVENTOS DE INTERFAZ
+         * ============================================================================
+         */
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const colors = {
+                success: 'bg-burgundy-950/95 border-buttermilk/60 text-buttermilk',
+                error:   'bg-burgundy-950/95 border-rose-400/60 text-rose-200',
+                warning: 'bg-burgundy-950/95 border-buttermilk/50 text-buttermilk',
+                info:    'bg-burgundy-950/95 border-pastelblue/60 text-pastelblue'
+            };
+
+            toast.className = `pointer-events-auto px-4 py-3 rounded-xl border shadow-2xl backdrop-blur-md text-xs font-medium flex items-center gap-2.5 transition-all duration-300 transform translate-y-2 opacity-0 ${colors[type] || colors.info}`;
+            toast.textContent = message;
+
+            container.appendChild(toast);
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3800);
+        }
+
+        function bindEventListeners() {
+            // Botones de cámara
+            document.getElementById('btn-toggle-camera').addEventListener('click', toggleCamera);
+            document.getElementById('btn-start-overlay').addEventListener('click', toggleCamera);
+
+            // Botón audio manual
+            document.getElementById('btn-audio-init').addEventListener('click', initAudioEngine);
+
+            // Selector de progresión
+            document.getElementById('progression-select').addEventListener('change', (e) => {
+                const key = e.target.value;
+                state.currentProgressionKey = key;
+                state.assignments = {
+                    left: JSON.parse(JSON.stringify(PROGRESSIONS[key].left)),
+                    right: JSON.parse(JSON.stringify(PROGRESSIONS[key].right))
+                };
+                state.activeTrigger = null;
+                renderFingerCards();
+                if (!state.isPdfMode) {
+                    renderDemoSongLines();
+                }
+                showToast(`Progresión cargada: ${PROGRESSIONS[key].title}`, 'info');
+            });
+
+            // Selector de timbre de sintetizador
+            document.getElementById('synth-preset').addEventListener('change', async (e) => {
+                state.synthPreset = e.target.value;
+                if (!state.audioInitialized) await initAudioEngine();
+                createSynthInstance(state.synthPreset);
+            });
+
+            // Cooldown y Espejo
+            document.getElementById('cooldown-select').addEventListener('change', (e) => {
+                state.cooldownMs = parseInt(e.target.value, 10);
+            });
+
+            document.getElementById('btn-mirror').addEventListener('click', () => {
+                state.mirrorVideo = !state.mirrorVideo;
+                showToast(state.mirrorVideo ? 'Modo espejo activado' : 'Modo espejo desactivado', 'info');
+            });
+
+            // Botones detener sonido y reiniciar secuencia
+            document.getElementById('btn-stop-sound').addEventListener('click', stopAllSounds);
+            document.getElementById('btn-reset-progression').addEventListener('click', () => {
+                state.activeTrigger = null;
+                state.currentDemoLine = 0;
+                updateFingerCardsUI();
+                if (!state.isPdfMode) {
+                    renderDemoSongLines();
+                    document.getElementById('document-scroll-container').scrollTo({ top: 0, behavior: 'smooth' });
+                }
+            });
+
+            // Subida de archivo PDF
+            const pdfInput = document.getElementById('pdf-upload-input');
+            document.getElementById('btn-upload-pdf').addEventListener('click', () => pdfInput.click());
+            pdfInput.addEventListener('change', (e) => {
+                if (e.target.files && e.target.files[0]) {
+                    handlePdfUpload(e.target.files[0]);
+                }
+            });
+
+            // Volver al modo demo
+            document.getElementById('btn-load-demo').addEventListener('click', () => {
+                state.isPdfMode = false;
+                document.getElementById('pdf-viewer-container').classList.add('hidden');
+                document.getElementById('pdf-viewer-container').classList.remove('flex');
+                document.getElementById('demo-song-container').classList.remove('hidden');
+                document.getElementById('btn-load-demo').classList.add('hidden');
+                document.getElementById('pdf-zoom-controls').classList.add('hidden');
+                document.getElementById('document-title').textContent = 'Canción Demo: "Luz de Ciudad"';
+                renderDemoSongLines();
+            });
+
+            // Controles de Auto-Scroll y Velocidad
+            document.getElementById('auto-scroll-toggle').addEventListener('change', (e) => {
+                state.autoScrollEnabled = e.target.checked;
+            });
+
+            const stepSlider = document.getElementById('scroll-step-slider');
+            stepSlider.addEventListener('input', (e) => {
+                state.scrollStepPx = parseInt(e.target.value, 10);
+                document.getElementById('scroll-step-label').textContent = `${state.scrollStepPx}px`;
+            });
+
+            // Controles de Zoom PDF
+            document.getElementById('btn-zoom-in').addEventListener('click', () => {
+                state.pdfScale = Math.min(2.0, state.pdfScale + 0.15);
+                renderAllPdfPages();
+            });
+            document.getElementById('btn-zoom-out').addEventListener('click', () => {
+                state.pdfScale = Math.max(0.6, state.pdfScale - 0.15);
+                renderAllPdfPages();
+            });
+
+            // Navegación manual del visor derecho
+            const scrollContainer = document.getElementById('document-scroll-container');
+            scrollContainer.addEventListener('scroll', updateDocProgressLabel);
+
+            document.getElementById('btn-scroll-top').addEventListener('click', () => {
+                scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+                if (!state.isPdfMode) {
+                    state.currentDemoLine = 0;
+                    renderDemoSongLines();
+                }
+            });
+
+            document.getElementById('btn-step-prev').addEventListener('click', () => {
+                if (!state.isPdfMode) {
+                    state.currentDemoLine = (state.currentDemoLine - 1 + DEMO_SONG_STRUCTURE.length) % DEMO_SONG_STRUCTURE.length;
+                    renderDemoSongLines();
+                    const el = document.getElementById(`demo-line-${state.currentDemoLine}`);
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } else {
+                    scrollContainer.scrollBy({ top: -state.scrollStepPx * 2, behavior: 'smooth' });
+                }
+            });
+
+            document.getElementById('btn-step-next').addEventListener('click', () => {
+                if (!state.isPdfMode) {
+                    state.currentDemoLine = (state.currentDemoLine + 1) % DEMO_SONG_STRUCTURE.length;
+                    renderDemoSongLines();
+                    const el = document.getElementById(`demo-line-${state.currentDemoLine}`);
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } else {
+                    scrollContainer.scrollBy({ top: state.scrollStepPx * 2, behavior: 'smooth' });
+                }
+            });
+
+            // Atajos de teclado: 1-5 Mano Izquierda (Meñique a Pulgar), 6-0 Mano Derecha (Pulgar a Meñique)
+            window.addEventListener('keydown', (e) => {
+                if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+                const leftMatch = LEFT_HAND_ORDER.find(item => item.key === e.key);
+                if (leftMatch) {
+                    playChordForHandFinger('left', leftMatch.fingerIdx, true);
+                    return;
+                }
+                const rightMatch = RIGHT_HAND_ORDER.find(item => item.key === e.key);
+                if (rightMatch) {
+                    playChordForHandFinger('right', rightMatch.fingerIdx, true);
+                    return;
+                }
+                if (e.key === 'Escape') {
+                    stopAllSounds();
+                }
+            });
+        }
+
+        // Inicialización al cargar la página
+        window.addEventListener('DOMContentLoaded', () => {
+            renderFingerCards();
+            renderDemoSongLines();
+            bindEventListeners();
+        });
+    </script>
+</body>
+</html>
